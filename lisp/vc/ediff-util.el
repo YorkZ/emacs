@@ -20,6 +20,15 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.
 
+;; Change Log:
+
+;; York Zhao <gtdplatform@gmail.com> Jan 27, 2012:
+;;
+;;    Add functionality to show hidden blocks when moving to a diff
+;;    region containing hidden text, and re-hide the previously opened
+;;    blocks when leaving the diff region.
+
+
 ;;; Commentary:
 
 ;;; Code:
@@ -38,6 +47,9 @@
 (defvar mark-active)
 
 (defvar ediff-after-quit-hook-internal nil)
+
+(defvar ediff-opened-overlays nil
+  "List of overlays opened while moving to diff areas")
 
 (eval-and-compile
   (unless (fboundp 'declare-function) (defmacro declare-function (&rest  _r))))
@@ -421,6 +433,7 @@ to invocation.")
       ;; since these vars are local to control-buffer
       ;; These won't run if there are errors in diff
       (ediff-with-current-buffer ediff-buffer-A
+        (make-local-variable 'ediff-opened-overlays)
 	(ediff-nuke-selective-display)
 	(run-hooks 'ediff-prepare-buffer-hook)
 	(if (ediff-with-current-buffer control-buffer ediff-merge-job)
@@ -435,6 +448,7 @@ to invocation.")
 	)
 
       (ediff-with-current-buffer ediff-buffer-B
+        (make-local-variable 'ediff-opened-overlays)
 	(ediff-nuke-selective-display)
 	(run-hooks 'ediff-prepare-buffer-hook)
 	(if (ediff-with-current-buffer control-buffer ediff-merge-job)
@@ -449,6 +463,7 @@ to invocation.")
 
       (if ediff-3way-job
 	  (ediff-with-current-buffer ediff-buffer-C
+            (make-local-variable 'ediff-opened-overlays)
 	    (ediff-nuke-selective-display)
 	    ;; the merge buffer should never be narrowed
 	    ;; (it can happen if it is on rmail-mode or similar)
@@ -1644,6 +1659,7 @@ the width of the A/B/C windows."
 (defun ediff-position-region (beg end pos _job-name)
   (if (> end (point-max))
       (setq end (point-max)))
+  (ediff-show-invisible-blocks beg end)
   (if ediff-windows-job
       (if (pos-visible-in-window-p end)
 	  () ; do nothing, wind is already positioned
@@ -1675,6 +1691,44 @@ the width of the A/B/C windows."
 		       2))))
     (goto-char pos)
     ))
+
+(defun ediff-intersects-p (start0 end0 start1 end1)
+  "Return t if regions START0..END0 and START1..END1 intersect."
+  (or (and (>= start0 start1) (<  start0 end1))
+      (and (>  end0 start1)   (<= end0 end1))
+      (and (>= start1 start0) (<  start1 end0))
+      (and (>  end1 start0)   (<= end1 end0))))
+
+(defun ediff-show-invisible-blocks (beg end)
+  "Show invisible blocks (if any) within the diff region BEG..END"
+
+  ;; First, re-hide blocks that was opened while entering previous
+  ;; diff area.
+  (setq ediff-opened-overlays
+        (delq nil
+              (mapcar
+               (lambda (ov)
+                 (if (ediff-intersects-p beg end
+                                         (overlay-start ov)
+                                         (overlay-end ov))
+                     ;; Keep this overlay in the list because it's
+                     ;; still valid
+                     ov
+                   ;; We have moved completely away from the block,
+                   ;; restore the `invisible' property so if it was
+                   ;; previously hidden it will be hidden again.
+                   (overlay-put ov 'invisible
+                                (overlay-get ov 'ediff-invisible))
+                   nil))
+               ediff-opened-overlays)))
+  ;; Now show the hidden blocks (if any) overlapping with this diff
+  ;; area.
+  (let ((overlays (overlays-in beg end)))
+    (dolist (ov overlays)
+      (when (overlay-get ov 'invisible)
+        (push ov ediff-opened-overlays)
+        (overlay-put ov 'ediff-invisible (overlay-get ov 'invisible))
+        (overlay-put ov 'invisible nil)))))
 
 ;; get number of lines from window start to region end
 (defun ediff-get-lines-to-region-end (buf-type &optional n ctl-buf)
