@@ -383,6 +383,7 @@ If `recentf-case-fold-search' is non-nil, ignore case when comparing
 filenames."
   (let ((m (recentf-string-member filename recentf-list)))
     (and m (setq recentf-list (delq (car m) recentf-list)))
+    (set-text-properties 0 (length filename) nil filename)
     (push filename recentf-list)))
 
 (defun recentf-apply-filename-handlers (name)
