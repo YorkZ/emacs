@@ -2825,10 +2825,10 @@ TRUE-DIRNAME is the `file-truename' of DIRNAME, if given."
 		      (concat comint-file-name-prefix filename))
 	      (when spec-directory
                 (setq spec-directory
-		      (file-truename
+		      (expand-file-name
 		       (concat comint-file-name-prefix spec-directory)))))
           (when spec-directory
-            (setq spec-directory (file-truename spec-directory))))
+            (setq spec-directory (expand-file-name spec-directory))))
 
 	;; If compilation-parse-errors-filename-function is
 	;; defined, use it to process the filename.
